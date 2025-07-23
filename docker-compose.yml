@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: wp_db
+    restart: unless-stopped
+    env_file: .env                # keep secrets out of version control
+    environment:
+      MYSQL_DATABASE:  ${MYSQL_DATABASE}
+      MYSQL_USER:      ${MYSQL_USER}
+      MYSQL_PASSWORD:  ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - wp-net
+
+  wordpress:
+    image: wordpress:6.5-php8.3-apache          # pin a known‑good tag
+    container_name: wordpress
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - wp_data:/var/www/html
+    ports:
+      - "8080:80"          # browse to http://localhost:8080/
+    networks:
+      - wp-net
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    depends_on:
+      - db
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_USER: ${MYSQL_USER}
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
+      PMA_ARBITRARY: 1
+    ports:
+      - "8081:80"          # http://localhost:8081/ for DB UI
+    networks:
+      - wp-net
+
+volumes:
+  db_data:
+  wp_data:
+
+networks:
+  wp-net:
+    driver: bridge
